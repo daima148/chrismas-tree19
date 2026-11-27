@@ -1,0 +1,1398 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#03060c">
+<title>Merry Christmas · chrismas-tree v19</title>
+<meta name="description" content="手势控制的 3D 粒子圣诞树：照片与文字环绕、跟随音乐律动、捏合抓取照片。">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎄</text></svg>">
+<style>
+  :root{ --ink:#fff6df; --gold:#ffd27a; --deep:#03060c; }
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; }
+  body{ margin:0; background:var(--deep); color:var(--ink); overflow:hidden;
+    -webkit-font-smoothing:antialiased; -webkit-tap-highlight-color:transparent;
+    font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    animation:fadeIn .9s ease both; }
+  @keyframes fadeIn{ from{opacity:0} to{opacity:1} }
+
+  #scene{ position:fixed; inset:0; width:100%; height:100%; display:block; cursor:grab; touch-action:none; }
+  #scene:active{ cursor:grabbing; }
+
+  .vignette{ position:fixed; inset:0; pointer-events:none;
+    background:radial-gradient(ellipse at 50% 42%, rgba(0,0,0,0) 38%, rgba(0,0,0,.55) 100%); mix-blend-mode:multiply; }
+
+  .hud{ position:fixed; top:max(16px, env(safe-area-inset-top)); right:max(14px, env(safe-area-inset-right));
+    display:flex; gap:7px; flex-wrap:wrap; justify-content:flex-end; max-width:70vw; z-index:20; }
+  .btn{ appearance:none; border:1px solid rgba(255,225,180,.18); background:rgba(255,255,255,.045);
+    color:rgba(255,240,214,.82); padding:8px 13px; border-radius:999px; font-size:13px; letter-spacing:.3px;
+    cursor:pointer; backdrop-filter:blur(10px) saturate(140%); -webkit-backdrop-filter:blur(10px) saturate(140%);
+    transition:.22s ease; display:inline-flex; align-items:center; gap:5px; white-space:nowrap; }
+  .btn:hover{ background:rgba(255,255,255,.10); border-color:rgba(255,225,180,.35); }
+  .btn[aria-pressed="true"]{ color:#2a1a05; background:linear-gradient(180deg,#ffe6ae,#ffc95e);
+    border-color:rgba(255,255,255,.6); box-shadow:0 0 22px rgba(255,196,92,.35); }
+
+  .panel{ position:fixed; top:calc(max(16px, env(safe-area-inset-top)) + 48px); right:max(14px, env(safe-area-inset-right));
+    width:216px; padding:8px; border-radius:16px; z-index:19;
+    background:rgba(18,14,10,.72); border:1px solid rgba(255,220,170,.22);
+    box-shadow:0 16px 44px rgba(0,0,0,.55); backdrop-filter:blur(16px) saturate(150%);
+    -webkit-backdrop-filter:blur(16px) saturate(150%);
+    opacity:0; transform:translateY(-8px) scale(.98); pointer-events:none; transition:.28s cubic-bezier(.2,.8,.2,1); }
+  .panel.on{ opacity:1; transform:none; pointer-events:auto; }
+  .prow{ display:flex; align-items:center; justify-content:space-between; padding:9px 10px; border-radius:10px; }
+  .prow:hover{ background:rgba(255,255,255,.05); }
+  .plabel{ font-size:13px; color:rgba(255,240,214,.85); letter-spacing:.02em; }
+  .sw{ width:40px; height:22px; border-radius:999px; border:1px solid rgba(255,220,170,.25);
+    background:rgba(255,255,255,.10); position:relative; cursor:pointer; padding:0; transition:.25s; }
+  .sw::after{ content:''; position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:50%;
+    background:rgba(255,246,226,.75); transition:.25s cubic-bezier(.2,.8,.2,1); }
+  .sw[aria-pressed="true"]{ background:linear-gradient(180deg,#ffdb9a,#ffbe55); border-color:rgba(255,255,255,.5); }
+  .sw[aria-pressed="true"]::after{ left:20px; background:#2a1a05; }
+  .pacts{ display:flex; gap:7px; padding:4px 6px 6px; }
+  .pbtn{ flex:1; appearance:none; border:1px solid rgba(255,220,170,.2); background:rgba(255,255,255,.05);
+    color:rgba(255,240,214,.85); font-size:13px; padding:9px 0; border-radius:10px; cursor:pointer; transition:.2s; }
+  .pbtn:hover{ background:rgba(255,220,170,.16); }
+  .pbtn:active{ transform:scale(.97); }
+
+  .title-wrap{ position:fixed; left:0; right:0; bottom:max(5vh, env(safe-area-inset-bottom));
+    text-align:center; pointer-events:none; z-index:9; }
+  h1{ margin:0; font-family:Georgia,"Times New Roman","Songti SC",serif; font-style:italic; font-weight:400;
+    font-size:clamp(26px, 4.2vw, 52px); letter-spacing:.03em;
+    background:linear-gradient(180deg,#fff9e6 6%,#ffe3a6 40%,#ffb86b 74%,#ff9a5c 100%);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    filter:drop-shadow(0 2px 18px rgba(255,190,110,.45)); animation:breathe 4.6s ease-in-out infinite; }
+  @keyframes breathe{ 0%,100%{ filter:drop-shadow(0 2px 16px rgba(255,185,105,.35)); }
+                      50%{ filter:drop-shadow(0 2px 30px rgba(255,200,120,.62)); } }
+  .sub{ margin:.7em 0 0; font-size:clamp(11px, 1.1vw, 14px); letter-spacing:.3em; text-indent:.3em;
+    color:rgba(255,238,206,.55); }
+
+  .hint{ position:fixed; left:50%; top:max(16px, env(safe-area-inset-top)); transform:translateX(-50%);
+    font-size:12px; letter-spacing:.12em; color:rgba(255,236,202,.5); padding:7px 14px; border-radius:999px;
+    border:1px solid rgba(255,235,200,.10); background:rgba(255,255,255,.03); pointer-events:none;
+    z-index:12; white-space:nowrap; animation:hintOut 1s ease 6s forwards; }
+  @keyframes hintOut{ to{ opacity:0; visibility:hidden; } }
+
+  .cam{ position:fixed; left:max(14px, env(safe-area-inset-left)); bottom:max(64px, calc(env(safe-area-inset-bottom) + 56px));
+    width:150px; z-index:11; opacity:0; transform:translateY(8px); pointer-events:none;
+    transition:.45s cubic-bezier(.2,.8,.2,1); }
+  .cam.on{ opacity:1; transform:none; }
+  .cam-inner{ position:relative; border-radius:14px; overflow:hidden; border:1px solid rgba(255,225,180,.22);
+    box-shadow:0 8px 30px rgba(0,0,0,.5); background:#000; }
+  .cam video, .cam canvas{ display:block; width:100%; }
+  .cam video{ opacity:.55; }
+  .cam canvas{ position:absolute; inset:0; }
+  .cam .tag{ position:absolute; left:8px; bottom:6px; font-size:11px; letter-spacing:.04em;
+    color:#ffe6ae; text-shadow:0 1px 6px #000; }
+
+  .gesture-now{ position:fixed; left:50%; bottom:max(13vh, calc(env(safe-area-inset-bottom) + 92px));
+    transform:translateX(-50%); font-size:14px; letter-spacing:.08em; padding:8px 18px; border-radius:999px;
+    background:rgba(255,200,120,.12); border:1px solid rgba(255,210,140,.35); color:#ffe9bd;
+    backdrop-filter:blur(8px); z-index:11; pointer-events:none; opacity:0; transition:.3s; }
+  .gesture-now.on{ opacity:1; }
+
+  .toast{ position:fixed; left:50%; top:calc(max(16px, env(safe-area-inset-top)) + 54px); transform:translate(-50%, -6px);
+    background:rgba(20,16,10,.82); border:1px solid rgba(255,210,140,.28); color:#ffeccb;
+    font-size:13px; padding:9px 16px; border-radius:999px; z-index:24; opacity:0; pointer-events:none;
+    transition:.3s; backdrop-filter:blur(10px); max-width:80vw; text-align:center; }
+  .toast.on{ opacity:1; transform:translate(-50%, 0); }
+
+  .badge{ position:fixed; left:max(14px, env(safe-area-inset-left)); bottom:max(14px, env(safe-area-inset-bottom));
+    font-size:11px; letter-spacing:.14em; color:rgba(255,236,202,.28); pointer-events:none; z-index:9; }
+
+  /* lightbox */
+  .lightbox{ position:fixed; inset:0; z-index:30; display:flex; align-items:center; justify-content:center;
+    background:rgba(2,4,8,.94); backdrop-filter:blur(10px); opacity:0; pointer-events:none; transition:.3s; }
+  .lightbox.on{ opacity:1; pointer-events:auto; }
+  .lightbox img{ max-width:90vw; max-height:86vh; border-radius:10px;
+    box-shadow:0 30px 90px rgba(0,0,0,.7), 0 0 0 1px rgba(255,235,200,.18);
+    transform:scale(.94); transition:.35s cubic-bezier(.2,.8,.2,1); }
+  .lightbox.on img{ transform:none; }
+  .lb-close{ position:absolute; top:max(18px, env(safe-area-inset-top)); right:18px; width:40px; height:40px;
+    border-radius:50%; border:1px solid rgba(255,235,200,.25); background:rgba(255,255,255,.08);
+    color:#ffeccb; font-size:20px; line-height:1; cursor:pointer; }
+
+  @media (max-width:620px){
+    .hint{ display:none; }
+    .btn{ padding:7px 11px; font-size:12px; }
+    .cam{ width:112px; }
+    .panel{ width:200px; }
+  }
+</style>
+</head>
+<body>
+<canvas id="scene" aria-label="交互式圣诞树"></canvas>
+<div class="vignette"></div>
+
+<div class="hint">拖拽旋转 · 单击照片看原图 · 开启手势用摄像头控制</div>
+
+<div class="hud">
+  <button class="btn" id="btnGesture"><span>🖐</span>手势</button>
+  <button class="btn" id="btnGrab"><span>🤏</span>抓取</button>
+  <button class="btn" id="btnSet"><span>⚙</span>设置</button>
+</div>
+
+<div class="panel" id="panel">
+  <div class="prow"><span class="plabel">落雪</span><button class="sw" id="swSnow" aria-pressed="true"></button></div>
+  <div class="prow"><span class="plabel">照片环绕</span><button class="sw" id="swPhoto" aria-pressed="true"></button></div>
+  <div class="prow"><span class="plabel">音乐 · 圣诞</span><button class="sw" id="swMusic" aria-pressed="false"></button></div>
+  <div class="pacts">
+    <button class="pbtn" id="pBurst">散开</button>
+    <button class="pbtn" id="pGather">聚合</button>
+  </div>
+  <div class="pacts">
+    <button class="pbtn" id="pPhotos">换照片</button>
+  </div>
+</div>
+
+<div class="cam" id="camPanel">
+  <div class="cam-inner">
+    <video id="camVideo" playsinline muted></video>
+    <canvas id="camOverlay"></canvas>
+    <div class="tag" id="camTag">手势识别中…</div>
+  </div>
+</div>
+
+<div class="gesture-now" id="gestureNow">🖐 张开手掌</div>
+<div class="toast" id="toast"></div>
+
+<div class="title-wrap">
+  <h1 id="hTitle">Merry Christmas</h1>
+  <p class="sub" id="hSub">圣诞快乐 · 愿你所愿皆所得</p>
+</div>
+
+<div class="badge">CHRISMAS-TREE · v19</div>
+
+<div class="lightbox" id="lightbox">
+  <button class="lb-close" id="lbClose">×</button>
+  <img id="lbImg" alt="">
+</div>
+
+<audio id="bgm" src="music.mp3" loop preload="auto" playsinline></audio>
+<input type="file" id="fileInput" accept="image/*" multiple hidden>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ============================================================
+     可配置区
+     ============================================================ */
+  var CONFIG = {
+    title: 'Merry Christmas',
+    subtitle: '圣诞快乐 · 愿你所愿皆所得',
+    ringText: 'MERRY CHRISTMAS ✦ 圣诞快乐 ✦ ',
+    music: 'music.mp3',
+    photos: [
+      'photos/1.jpg', 'photos/2.jpg', 'photos/3.jpg',
+      'photos/4.jpg', 'photos/5.jpg', 'photos/6.jpg'
+    ]
+  };
+
+  var TAU = Math.PI * 2;
+  function rand(a, b) { return a + Math.random() * (b - a); }
+  function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function easeOut(t) { t = clamp(t, 0, 1); return 1 - Math.pow(1 - t, 3); }
+
+  var canvas = document.getElementById('scene');
+  var ctx = canvas.getContext('2d', { alpha: false });
+
+  var W = 0, H = 0, DPR = 1, unit = 0, cx = 0, cy = 0, bg = null;
+
+  var state = {
+    rot: 0.55, spin: 0.20, tilt: -0.10,
+    zoom: 1, targetZoom: 1,
+    dragging: false, lastX: 0, lastY: 0,
+    snow: true, cardsOn: true, t: 0,
+    morph: 0, morphT: 0,
+    focus: -1,
+    aBass: 0, energy: 0,
+    portrait: false
+  };
+
+  /* ------------------------------------------------------------ sprites */
+  var spriteCache = new Map();
+  function sprite(rgb) {
+    var key = rgb.join(',');
+    var hit = spriteCache.get(key);
+    if (hit) return hit;
+    var S = 64;
+    var cv = document.createElement('canvas');
+    cv.width = S; cv.height = S;
+    var g = cv.getContext('2d');
+    var grad = g.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+    grad.addColorStop(0, 'rgba(255,255,255,0.92)');
+    grad.addColorStop(0.13, 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',0.94)');
+    grad.addColorStop(0.38, 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',0.34)');
+    grad.addColorStop(0.72, 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',0.07)');
+    grad.addColorStop(1, 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',0)');
+    g.fillStyle = grad;
+    g.beginPath(); g.arc(S / 2, S / 2, S / 2, 0, TAU); g.fill();
+    spriteCache.set(key, cv);
+    return cv;
+  }
+
+  var C = {
+    green: [[26,132,84],[44,176,116],[16,96,66],[110,208,140],[22,150,96]],
+    gold:  [[255,206,112],[255,176,74],[255,228,170]],
+    warm:  [[255,246,219],[255,233,186]],
+    red:   [[255,82,96],[255,52,78],[255,128,96]],
+    ice:   [[150,226,255],[196,240,255]]
+  };
+  var S_GREEN = C.green.map(sprite), S_GOLD = C.gold.map(sprite),
+      S_WARM = C.warm.map(sprite),  S_RED = C.red.map(sprite),
+      S_ICE = C.ice.map(sprite),    S_WHITE = sprite([255,255,255]);
+
+  /* ------------------------------------------------------------ 树 */
+  var R0 = 0.66;
+  var pts = [];
+  function surfaceR(u) { return R0 * Math.pow(u, 0.94); }
+
+  function pushPt(x0, z0, y, size, sp, tw, base) {
+    var R = rand(1.25, 2.75);
+    var theta = Math.random() * TAU;
+    var phi = Math.acos(rand(-1, 1));
+    var sp0 = Math.sin(phi);
+    pts.push({
+      x0: x0, z0: z0, y: y,
+      bx: R * sp0 * Math.cos(theta) * 1.5,
+      by: R * Math.cos(phi) * 0.72,
+      bz: R * sp0 * Math.sin(theta) * 1.5,
+      size: size, sp: sp, tw: tw, ph: rand(0, TAU), base: base, dly: rand(0, 0.34)
+    });
+  }
+
+  function buildTree() {
+    pts.length = 0;
+
+    for (var i = 0; i < 1650; i++) {
+      var u = Math.random();
+      var rs = surfaceR(u);
+      var frill = 1 + 0.085 * Math.sin(u * 22 + 0.7);
+      var r = rs * frill * rand(0.30, 1.0);
+      var a = Math.random() * TAU;
+      var y = -1 + 2 * u + rand(-0.02, 0.02);
+      var inner = r / (rs + 0.001);
+      var sp;
+      if (Math.random() < 0.16) sp = S_GREEN[1];
+      else if (inner > 0.75) sp = S_GREEN[Math.random() < 0.55 ? 1 : 3];
+      else sp = S_GREEN[Math.random() < 0.5 ? 0 : (Math.random() < 0.5 ? 2 : 4)];
+      pushPt(r * Math.cos(a), r * Math.sin(a), y,
+             rand(0.011, 0.022) * (0.78 + 0.5 * inner), sp, rand(0.5, 2.1), rand(0.6, 1.0));
+    }
+
+    var GAR = 950, turns = 11;
+    for (var j = 0; j < GAR; j++) {
+      var u2 = (j + rand(-0.5, 0.5)) / GAR;
+      if (u2 < 0.02) u2 = 0.02;
+      if (u2 > 0.955) u2 = 0.955;
+      var ang = u2 * turns * TAU;
+      var rr = surfaceR(u2) * 1.01 + 0.010;
+      var pal = (j % 7 === 0) ? S_RED : ((j % 5 === 0) ? S_ICE : S_GOLD);
+      pushPt(rr * Math.cos(ang), rr * Math.sin(ang), -1 + 2 * u2,
+             rand(0.015, 0.027), pal[Math.floor(Math.random() * pal.length)], rand(0.8, 2.6), 1.0);
+    }
+
+    for (var k = 0; k < 78; k++) {
+      var u3 = rand(0.06, 0.93), a3 = Math.random() * TAU, r3 = surfaceR(u3) * 0.99;
+      var pal2 = (k % 3 === 0) ? S_RED : ((k % 5 === 0) ? S_ICE : S_GOLD);
+      pushPt(r3 * Math.cos(a3), r3 * Math.sin(a3), -1 + 2 * u3,
+             rand(0.042, 0.072), pal2[Math.floor(Math.random() * pal2.length)], rand(0.6, 1.4), 1.15);
+    }
+  }
+
+  var N = 0, vx = null, vy = null, vs = null, vz = null, order = [];
+
+  function allocBuffers() {
+    N = pts.length;
+    vx = new Float32Array(N); vy = new Float32Array(N);
+    vs = new Float32Array(N); vz = new Float32Array(N);
+    order = new Array(N);
+    for (var i = 0; i < N; i++) order[i] = i;
+  }
+
+  /* ------------------------------------------------------------ 照片卡 */
+  var cards = [];
+  var hitRects = [];
+
+  function makeCardCanvas(img, idx) {
+    var cw = 280, ch = 360, pad = 20;
+    var c = document.createElement('canvas');
+    c.width = cw; c.height = ch;
+    var g = c.getContext('2d');
+    g.clearRect(0, 0, cw, ch);
+
+    g.save();
+    g.shadowColor = 'rgba(0,0,0,0.55)';
+    g.shadowBlur = 18;
+    g.shadowOffsetY = 10;
+    g.fillStyle = '#fffdf6';
+    roundRect(g, pad, pad, cw - pad * 2, ch - pad * 2, 6);
+    g.fill();
+    g.restore();
+
+    var fw = cw - pad * 2, fh = ch - pad * 2;
+    var ix = pad + 10, iy = pad + 10, iw = fw - 20, ih = fh - 20 - 38;
+
+    if (img) {
+      var sc = Math.max(iw / img.width, ih / img.height);
+      var dw = img.width * sc, dh = img.height * sc;
+      g.save();
+      g.beginPath(); g.rect(ix, iy, iw, ih); g.clip();
+      g.drawImage(img, ix + (iw - dw) / 2, iy + (ih - dh) / 2, dw, dh);
+      var vg = g.createRadialGradient(ix + iw / 2, iy + ih / 2, ih * 0.3, ix + iw / 2, iy + ih / 2, ih * 0.85);
+      vg.addColorStop(0, 'rgba(0,0,0,0)');
+      vg.addColorStop(1, 'rgba(0,0,0,0.24)');
+      g.fillStyle = vg; g.fillRect(ix, iy, iw, ih);
+      g.restore();
+    } else {
+      var lg = g.createLinearGradient(ix, iy, ix, iy + ih);
+      lg.addColorStop(0, '#eef2fa'); lg.addColorStop(0.6, '#cfd7e6'); lg.addColorStop(1, '#b3bdce');
+      g.fillStyle = lg; g.fillRect(ix, iy, iw, ih);
+      drawFlake(g, ix + iw / 2, iy + ih * 0.42, iw * 0.19, 'rgba(255,255,255,0.96)', 0.95);
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillStyle = 'rgba(40,48,66,0.62)';
+      g.font = '12px -apple-system, "PingFang SC", sans-serif';
+      g.fillText('把你的照片放在这里', ix + iw / 2, iy + ih * 0.74);
+      g.fillStyle = 'rgba(40,48,66,0.38)';
+      g.font = '11px -apple-system, monospace, sans-serif';
+      g.fillText('photos/' + (idx + 1) + '.jpg', ix + iw / 2, iy + ih * 0.87);
+    }
+
+    return c;
+  }
+
+  function drawFlake(g, x, y, R, color, alpha) {
+    g.save();
+    g.translate(x, y);
+    g.strokeStyle = color;
+    g.globalAlpha = alpha;
+    g.lineCap = 'round';
+    for (var i = 0; i < 6; i++) {
+      g.save();
+      g.rotate(i * Math.PI / 3);
+      g.lineWidth = R * 0.085;
+      g.beginPath(); g.moveTo(0, 0); g.lineTo(0, -R); g.stroke();
+      for (var b = 0; b < 2; b++) {
+        var p = 0.42 + b * 0.28;
+        var len = R * (0.30 - b * 0.09);
+        g.lineWidth = R * 0.06;
+        g.beginPath(); g.moveTo(0, -R * p); g.lineTo(-len, -R * p - len * 0.85); g.stroke();
+        g.beginPath(); g.moveTo(0, -R * p); g.lineTo(len, -R * p - len * 0.85); g.stroke();
+      }
+      g.restore();
+    }
+    g.restore();
+  }
+
+  function roundRect(g, x, y, w, h, r) {
+    if (g.roundRect) { g.beginPath(); g.roundRect(x, y, w, h, r); return; }
+    g.beginPath();
+    g.moveTo(x + r, y);
+    g.arcTo(x + w, y, x + w, y + h, r);
+    g.arcTo(x + w, y + h, x, y + h, r);
+    g.arcTo(x, y + h, x, y, r);
+    g.arcTo(x, y, x + w, y, r);
+    g.closePath();
+  }
+
+  function buildCards(imgs) {
+    cards.length = 0;
+    var n = Math.min(9, imgs.length || 6);
+    for (var i = 0; i < n; i++) {
+      cards.push({
+        idx: i,
+        img: imgs[i] || null,
+        canvas: makeCardCanvas(imgs[i] || null, i),
+        angle: (i / n) * TAU + rand(-0.12, 0.12),
+        y: [-0.44, -0.10, 0.30, -0.30, 0.06, 0.38, -0.40, 0.00, 0.42][i % 9] + rand(-0.03, 0.03),
+        r: (i % 2 === 0 ? 1.34 : 1.46) + rand(-0.03, 0.03),
+        bob: rand(0, TAU),
+        tilt: rand(-0.04, 0.04),
+        ft: 0
+      });
+    }
+  }
+
+  function loadPhotos(list, cb) {
+    var imgs = [], pending = list.length, done = false;
+    function finish() { if (done) return; done = true; cb(imgs); }
+    if (!pending) { finish(); return; }
+    list.forEach(function (src, i) {
+      var im = new Image();
+      im.onload = function () { imgs[i] = im; if (--pending <= 0) finish(); };
+      im.onerror = function () { if (--pending <= 0) finish(); };
+      im.src = src;
+    });
+    setTimeout(finish, 5000);
+  }
+
+  /* ------------------------------------------------------------ 雪 / 星火 */
+  var snow = [];
+  function initSnow() {
+    snow.length = 0;
+    for (var i = 0; i < 110; i++) {
+      snow.push({ x: Math.random() * W, y: Math.random() * H, z: rand(0.35, 1.0),
+                  r: rand(0.9, 3.1), vy: rand(16, 48), sway: rand(8, 26),
+                  ph: rand(0, TAU), a: rand(0.25, 0.85) });
+    }
+  }
+
+  var sparks = [];
+  function burst(x, y, n) {
+    for (var i = 0; i < n; i++) {
+      var ang = Math.random() * TAU, spd = rand(60, 260);
+      sparks.push({ x: x, y: y, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd - rand(20, 90),
+                    life: 1, decay: rand(0.55, 1.1), size: rand(0.6, 2.4),
+                    sp: Math.random() < 0.35 ? S_WARM[0] : (Math.random() < 0.5 ? S_GOLD[0] : S_ICE[0]) });
+    }
+    if (sparks.length > 900) sparks.splice(0, sparks.length - 900);
+  }
+
+  /* ------------------------------------------------------------ 尺寸 */
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = Math.floor(W * DPR); canvas.height = Math.floor(H * DPR);
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+    var portrait = H > W * 1.15;
+    state.portrait = portrait;
+    unit = portrait ? Math.min(H * 0.305, W * 0.40) : Math.min(H * 0.305, W * 0.335);
+    cx = W * 0.5;
+    cy = portrait ? H * 0.44 : H * 0.46;
+
+    buildBackground();
+    initSnow();
+  }
+
+  function buildBackground() {
+    bg = document.createElement('canvas');
+    bg.width = Math.floor(W * DPR); bg.height = Math.floor(H * DPR);
+    var g = bg.getContext('2d');
+    g.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+    var grad = g.createRadialGradient(W * 0.5, H * 0.42, 0, W * 0.5, H * 0.42, Math.max(W, H) * 0.82);
+    grad.addColorStop(0, '#0b1526');
+    grad.addColorStop(0.42, '#070e1a');
+    grad.addColorStop(1, '#02040a');
+    g.fillStyle = grad; g.fillRect(0, 0, W, H);
+
+    var n = Math.floor((W * H) / 5200);
+    for (var i = 0; i < n; i++) {
+      var x = Math.random() * W, y = Math.random() * H * 0.9;
+      var s = Math.random() < 0.82 ? rand(0.3, 0.95) : rand(1.0, 1.8);
+      var al = rand(0.06, 0.55);
+      g.fillStyle = 'rgba(' + (Math.random() < 0.15 ? '255,226,178' : '214,232,255') + ',' + al + ')';
+      g.beginPath(); g.arc(x, y, s, 0, TAU); g.fill();
+    }
+
+    var haze = g.createRadialGradient(W * 0.18, H * 0.12, 0, W * 0.18, H * 0.12, Math.max(W, H) * 0.5);
+    haze.addColorStop(0, 'rgba(52,92,140,0.16)');
+    haze.addColorStop(1, 'rgba(52,92,140,0)');
+    g.fillStyle = haze; g.fillRect(0, 0, W, H);
+  }
+
+  /* ------------------------------------------------------------ 星星 */
+  function starPath(g, x, y, R, r, rot) {
+    g.beginPath();
+    for (var i = 0; i < 10; i++) {
+      var rad = (i % 2 === 0) ? R : r;
+      var a = rot + i * Math.PI / 5 - Math.PI / 2;
+      var px = x + Math.cos(a) * rad, py = y + Math.sin(a) * rad;
+      if (i === 0) g.moveTo(px, py); else g.lineTo(px, py);
+    }
+    g.closePath();
+  }
+
+  function drawStar(x, y, s, t, alpha) {
+    var R = 0.075 * unit * s * state.zoom * (1 + 0.12 * state.aBass);
+    var pulse = 0.86 + 0.14 * Math.sin(t * 2.2);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = alpha;
+
+    var d = R * 9 * pulse;
+    ctx.drawImage(S_GOLD[0], x - d / 2, y - d / 2, d, d);
+
+    for (var i = 0; i < 8; i++) {
+      var a = t * 0.18 + i * TAU / 8;
+      var len = R * (i % 2 === 0 ? 3.6 : 2.1) * pulse;
+      var gx = Math.cos(a), gy = Math.sin(a);
+      var lg = ctx.createLinearGradient(x, y, x + gx * len, y + gy * len);
+      lg.addColorStop(0, 'rgba(255,238,196,0.75)');
+      lg.addColorStop(1, 'rgba(255,200,120,0)');
+      ctx.strokeStyle = lg; ctx.lineWidth = Math.max(0.7, R * 0.10);
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + gx * len, y + gy * len); ctx.stroke();
+    }
+
+    var sg = ctx.createRadialGradient(x, y - R * 0.2, 0, x, y, R * 1.05);
+    sg.addColorStop(0, 'rgba(255,255,250,1)');
+    sg.addColorStop(0.45, 'rgba(255,236,178,0.95)');
+    sg.addColorStop(1, 'rgba(255,168,74,0.55)');
+    ctx.fillStyle = sg;
+    starPath(ctx, x, y, R * 1.45, R * 0.62, t * 0.12);
+    ctx.fill();
+
+    ctx.fillStyle = 'rgba(255,255,240,0.9)';
+    starPath(ctx, x, y, R * 0.85, R * 0.34, -t * 0.1 - 0.3);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /* ------------------------------------------------------------ 卡片位置 */
+  function cardScreen(card, cosR, sinR, cosT, sinT, morph) {
+    var beat = state.aBass;
+    var ra = card.r * (state.portrait ? 0.86 : 1) * (1 + 0.85 * morph + 0.07 * beat);
+    var a = card.angle + state.rot;
+    var x0 = ra * Math.cos(a), z0 = ra * Math.sin(a);
+    var y = card.y + Math.sin(state.t * 0.8 + card.bob) * 0.04 + morph * (card.y > 0 ? 0.5 : -0.5);
+    y += 0.02 * beat * Math.sin(state.t * 3 + card.bob);
+
+    var px = x0, pz = z0;
+    var y2 = y * cosT - pz * sinT;
+    var z2 = y * sinT + pz * cosT;
+    var sc = 4.5 / (4.5 + z2);
+    return {
+      sx: cx + px * sc * unit * state.zoom,
+      sy: cy + y2 * sc * unit * state.zoom,
+      sc: sc, z: z2,
+      face: Math.cos(a),
+      w: (state.portrait ? 0.158 : 0.198) * unit * sc * state.zoom * (1 + 0.04 * beat),
+      a: a
+    };
+  }
+
+  function drawCard(card, p) {
+    if (!state.cardsOn && card.ft <= 0.05) return;
+    var ft = card.ft;
+
+    var faceAbs = Math.abs(p.face);
+    var scX = 0.30 + 0.70 * faceAbs;
+    var w = p.w * 2, h = w * (360 / 280);
+    var sx = clamp(p.sx, w * 0.5 + 6, W - w * 0.5 - 6);
+    var sy = clamp(p.sy, h * 0.42 + 6, H * 0.78);
+    var alpha = 0.45 + 0.55 * clamp((p.z + 1.4) / 2.6, 0, 1);
+    alpha *= Math.pow(clamp((faceAbs - 0.16) / 0.5, 0, 1), 0.85);   // 侧到只剩窄条时完全隐去
+    if (state.focus >= 0 && ft < 0.05) alpha *= 0.45;
+
+    if (ft > 0.01) {
+      var fw = Math.min(W * 0.62, unit * 0.80);
+      w = lerp(w, fw, ft);
+      h = w * (360 / 280);
+      sx = lerp(sx, cx, ft);
+      sy = lerp(sy, cy - unit * 0.02, ft);
+      scX = lerp(scX, 1, ft);
+      alpha = lerp(alpha, 1, ft);
+
+      // 聚焦时的柔光
+      var gg = ctx.createRadialGradient(cx, cy, 0, cx, cy, fw * 1.5);
+      gg.addColorStop(0, 'rgba(255,214,150,0.16)');
+      gg.addColorStop(1, 'rgba(255,214,150,0)');
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = ft;
+      ctx.fillStyle = gg;
+      ctx.fillRect(cx - fw * 1.6, cy - fw * 1.6, fw * 3.2, fw * 3.2);
+      ctx.restore();
+    }
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(sx, sy);
+    ctx.rotate(card.tilt + Math.sin(state.t * 0.6 + card.bob) * 0.02 * (1 - ft));
+    ctx.scale(scX, 1);
+    ctx.drawImage(card.canvas, -w / 2, -h / 2, w, h);
+    ctx.restore();
+
+    if (ft <= 0.05 && state.cardsOn) {
+      hitRects.push({ x: sx - w * scX / 2, y: sy - h / 2, w: w * scX, h: h, card: card });
+    }
+  }
+
+  /* ------------------------------------------------------------ 文字环（真实字宽沿树脚椭圆弧排字，随音乐起伏） */
+  var ringFmt = null;
+  var ringItems = [];
+
+  function buildRingFmt() {
+    var base = (CONFIG.ringText || '').replace(/\s/g, '');
+    var chars = base.split('');
+    var cum = [], tot = 0, tr = 4;   // tr = 字距（按 100px 字号计）
+    ctx.save();
+    ctx.font = '600 100px Georgia, "Songti SC", "STSong", serif';
+    for (var i = 0; i < chars.length; i++) {
+      cum.push(tot);
+      tot += ctx.measureText(chars[i]).width + tr;
+    }
+    ctx.restore();
+    ringFmt = { chars: chars, cum: cum, total: tot || 1 };
+  }
+
+  function ringGeom() {
+    var por = state.portrait;
+    var beat = state.aBass;
+    var A = (por ? 0.92 : 1.02) * unit * state.zoom * (1 + 0.05 * beat) * (1 + 0.28 * state.morph);
+    var B = Math.max(6, (por ? 0.065 : 0.115) * unit * state.zoom * (1 + 0.10 * beat));
+    var R = (A * A + B * B) / (2 * B);          // 过 (±A, 0) 与 (0, B) 的圆弧半径
+    var phimax = Math.asin(clamp(A / R, 0, 1));
+    return {
+      A: A, B: B, R: R, phimax: phimax,
+      S: 2 * R * phimax,                          // 可见弧长
+      y: cy + (por ? 1.02 : 1.06) * unit * state.zoom - 0.14 * unit * state.morph
+         + 0.014 * unit * beat * Math.sin(state.t * 3.2),
+      top: 0
+    };
+  }
+
+  function layoutRing() {
+    ringItems.length = 0;
+    if (!ringFmt || !ringFmt.chars.length) return;
+
+    var g = ringGeom();
+    var n = ringFmt.chars.length;
+    // 让一份文字正好铺满可见弧 → 滚动时首尾相接，不会出现空档
+    var fs = g.S * 100 / ringFmt.total;
+    fs = clamp(fs, 0.026 * unit * state.zoom, 0.16 * unit * state.zoom);
+    var scale = fs / 100;
+    var S = g.S, R = g.R, phiMax = g.phimax;
+    var shift = state.rot * 1.35 * R;           // 与旋转同向，连续滚字
+
+    for (var i = 0; i < n; i++) {
+      var pos = (ringFmt.cum[i] * scale + shift) % (ringFmt.total * scale);
+      if (pos < 0) pos += ringFmt.total * scale;
+      var phi = (pos / (ringFmt.total * scale)) * (2 * phiMax) - phiMax;
+      var w = Math.abs(phi);
+      var fade = clamp((phiMax - w) / 0.06, 0, 1);
+      if (fade <= 0.02) continue;
+      var depth = Math.cos(phi);
+      ringItems.push({
+        ch: ringFmt.chars[i],
+        sx: cx + R * Math.sin(phi),
+        sy: (g.y + g.B - R) + R * Math.cos(phi) + 0.008 * unit * Math.sin(state.t * 1.3 + i * 0.5),
+        depth: depth,
+        ramp: fade,
+        fs: Math.max(7, fs * (0.82 + 0.18 * depth))
+      });
+    }
+  }
+
+  function drawRingHalf() {
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(255,233,187,0.98)';
+    for (var i = 0; i < ringItems.length; i++) {
+      var it = ringItems[i];
+      var a = (0.12 + 0.88 * Math.pow(clamp(it.depth, 0, 1), 0.6)) * it.ramp * (1 + 0.08 * state.aBass);
+      ctx.globalAlpha = Math.min(1, a);
+      ctx.font = '600 ' + it.fs.toFixed(1) + 'px Georgia, "Songti SC", "STSong", serif';
+      if (it.depth > 0.55) {
+        ctx.shadowColor = 'rgba(255,176,84,0.6)';
+        ctx.shadowBlur = it.fs * 0.5;
+      }
+      ctx.fillText(it.ch, it.sx, it.sy);
+      ctx.shadowBlur = 0;
+    }
+    ctx.restore();
+  }
+
+  /* ------------------------------------------------------------ 渲染 */
+  function render() {
+    var t = state.t;
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    if (bg) { ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.drawImage(bg, 0, 0, W, H); }
+    else { ctx.fillStyle = '#04070e'; ctx.fillRect(0, 0, W, H); }
+
+    var cosR = Math.cos(state.rot), sinR = Math.sin(state.rot);
+    var cosT = Math.cos(state.tilt), sinT = Math.sin(state.tilt);
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    var ay = cy - unit * 0.15;
+    var ag = ctx.createRadialGradient(cx, ay, 0, cx, ay, unit * (2.0 + 0.6 * state.morph));
+    ag.addColorStop(0, 'rgba(46,150,110,' + (0.16 - 0.06 * state.morph + 0.05 * state.aBass) + ')');
+    ag.addColorStop(0.45, 'rgba(30,110,90,' + (0.07 + 0.03 * state.morph) + ')');
+    ag.addColorStop(1, 'rgba(20,80,70,0)');
+    ctx.fillStyle = ag; ctx.fillRect(0, 0, W, H);
+
+    ctx.save();
+    ctx.translate(cx, cy + unit * 1.0);
+    ctx.scale(1, 0.30);
+    var gg = ctx.createRadialGradient(0, 0, 0, 0, 0, unit * 1.15);
+    gg.addColorStop(0, 'rgba(120,220,170,0.14)');
+    gg.addColorStop(0.5, 'rgba(80,180,150,0.06)');
+    gg.addColorStop(1, 'rgba(60,140,130,0)');
+    ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(0, 0, unit * 1.15, 0, TAU); ctx.fill();
+    ctx.restore();
+    ctx.restore();
+
+    hitRects.length = 0;
+
+    var cardP = [];
+    for (var ci = 0; ci < cards.length; ci++) cardP.push(cardScreen(cards[ci], cosR, sinR, cosT, sinT, state.morph));
+
+    layoutRing();
+
+    for (var c0 = 0; c0 < cards.length; c0++) {
+      if (cards[c0].ft > 0.01) continue;
+      if (cardP[c0].z < 0) drawCard(cards[c0], cardP[c0]);
+    }
+
+    var morph = state.morph;
+    for (var i = 0; i < N; i++) {
+      var p = pts[i];
+      var loc = clamp((morph - p.dly) / (1 - 0.34), 0, 1);
+      loc = easeOut(loc);
+      var x0 = lerp(p.x0, p.bx, loc);
+      var z0 = lerp(p.z0, p.bz, loc);
+      var y0 = lerp(p.y, p.by, loc);
+
+      var x = x0 * cosR - z0 * sinR;
+      var z = x0 * sinR + z0 * cosR;
+      var y2 = y0 * cosT - z * sinT;
+      var z2 = y0 * sinT + z * cosT;
+      var sc = 4.5 / (4.5 + z2);
+      vx[i] = cx + x * sc * unit * state.zoom;
+      vy[i] = cy + y2 * sc * unit * state.zoom;
+      vs[i] = sc;
+      vz[i] = z2;
+    }
+    for (var o = 0; o < N; o++) order[o] = o;
+    order.sort(function (a, b) { return vz[a] - vz[b]; });
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (var q = 0; q < N; q++) {
+      var id = order[q];
+      var pt = pts[id];
+      var s = vs[id];
+      var tw = 0.72 + 0.28 * Math.sin(t * pt.tw + pt.ph);
+      var alpha = pt.base * tw * (0.30 + 0.85 * s) * (1 + 0.12 * state.aBass);
+      if (alpha <= 0.02) continue;
+      var d2 = pt.size * s * unit * state.zoom * 2.1 * (0.75 + 0.35 * tw) * (1 + 0.06 * state.aBass);
+      ctx.globalAlpha = Math.min(1, alpha);
+      ctx.drawImage(pt.sp, vx[id] - d2 / 2, vy[id] - d2 / 2, d2, d2);
+    }
+    ctx.restore();
+
+    var ty = -1.03 * cosT;
+    var tz = -1.03 * sinT;
+    var tsc = 4.5 / (4.5 + tz);
+    drawStar(cx, cy + ty * tsc * unit * state.zoom, tsc, t,
+             clamp(1 - state.morph * 2, 0, 1));
+
+    drawRingHalf();
+
+    for (var c1 = 0; c1 < cards.length; c1++) {
+      if (cards[c1].ft > 0.01) continue;
+      if (cardP[c1].z >= 0) drawCard(cards[c1], cardP[c1]);
+    }
+
+    // 聚焦卡片置顶
+    for (var c2 = 0; c2 < cards.length; c2++) {
+      if (cards[c2].ft > 0.01) drawCard(cards[c2], cardP[c2]);
+    }
+
+    if (state.snow) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (var f = 0; f < snow.length; f++) {
+        var fl = snow[f], d3 = fl.r * (1.2 + fl.z * 1.6);
+        ctx.globalAlpha = fl.a * (0.45 + 0.55 * fl.z);
+        ctx.drawImage(S_WHITE, fl.x - d3, fl.y - d3, d3 * 2, d3 * 2);
+      }
+      ctx.restore();
+    }
+
+    if (sparks.length) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (var k = 0; k < sparks.length; k++) {
+        var sk = sparks[k], ds = sk.size * 3.2;
+        ctx.globalAlpha = Math.max(0, sk.life) * 0.9;
+        ctx.drawImage(sk.sp, sk.x - ds, sk.y - ds, ds * 2, ds * 2);
+      }
+      ctx.restore();
+    }
+  }
+
+  /* ------------------------------------------------------------ 更新 */
+  function update(dt) {
+    state.t += dt;
+
+    // 旋转永不停止（拖动时由手控制）
+    if (!state.dragging) {
+      state.rot += state.spin * dt * (1 - 0.45 * state.morph);
+    }
+
+    state.zoom += (state.targetZoom - state.zoom) * Math.min(1, dt * 7);
+    state.morph += (state.morphT - state.morph) * Math.min(1, dt * 4.2);
+    if (Math.abs(state.morphT - state.morph) < 0.002) state.morph = state.morphT;
+
+    // 聚焦动画
+    for (var c = 0; c < cards.length; c++) {
+      var target = (state.focus === c) ? 1 : 0;
+      cards[c].ft += (target - cards[c].ft) * Math.min(1, dt * 5.5);
+      if (cards[c].ft < 0.005) cards[c].ft = 0;
+      if (cards[c].ft > 0.995) cards[c].ft = 1;
+    }
+
+    // 音乐律动
+    var raw = readAudio();
+    state.aBass += (raw.bass - state.aBass) * 0.20;
+    state.energy += (raw.energy - state.energy) * 0.18;
+
+    if (state.snow) {
+      for (var i = 0; i < snow.length; i++) {
+        var f = snow[i];
+        f.y += f.vy * dt * (0.45 + f.z * 0.9);
+        f.x += Math.sin(state.t * 0.6 + f.ph) * f.sway * dt;
+        if (f.y > H + 12) { f.y = -12; f.x = Math.random() * W; }
+        if (f.x < -14) f.x = W + 14;
+        if (f.x > W + 14) f.x = -14;
+      }
+    }
+
+    for (var k = sparks.length - 1; k >= 0; k--) {
+      var sk = sparks[k];
+      sk.life -= sk.decay * dt;
+      if (sk.life <= 0) { sparks.splice(k, 1); continue; }
+      sk.vy += 260 * dt;
+      sk.vx *= (1 - 1.4 * dt); sk.vy *= (1 - 1.2 * dt);
+      sk.x += sk.vx * dt; sk.y += sk.vy * dt;
+    }
+  }
+
+  var last = 0;
+  function frame(now) {
+    if (!last) last = now;
+    var dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    update(dt);
+    render();
+    requestAnimationFrame(frame);
+  }
+
+  /* ------------------------------------------------------------ 散开 / 聚合 */
+  function explode() {
+    if (state.morphT >= 0.5) return;
+    state.morphT = 1;
+    setFocus(-1);
+  }
+  function gather() {
+    if (state.morphT <= 0.5) return;
+    state.morphT = 0;
+  }
+  function toggleBurst() {
+    if (state.morphT > 0.5) gather(); else explode();
+  }
+
+  function setFocus(idx) {
+    if (idx === state.focus) return;
+    state.focus = idx;
+    if (idx >= 0) { state.morphT = 0; }
+    document.getElementById('btnGrab').setAttribute('aria-pressed', idx >= 0 ? 'true' : 'false');
+  }
+
+  function grabNearest(screenX) {
+    if (state.focus >= 0) { setFocus(-1); return; }
+    if (!cards.length) return;
+    if (state.morphT > 0.5) gather();
+    var best = -1, bestD = 1e9;
+    var cosR = Math.cos(state.rot), sinR = Math.sin(state.rot);
+    var cosT = Math.cos(state.tilt), sinT = Math.sin(state.tilt);
+    for (var i = 0; i < cards.length; i++) {
+      var p = cardScreen(cards[i], cosR, sinR, cosT, sinT, state.morph);
+      if (p.z < -0.2) continue;
+      var dx = Math.abs(p.sx - (screenX == null ? cx : screenX));
+      if (dx < bestD) { bestD = dx; best = i; }
+    }
+    if (best < 0) best = 0;
+    setFocus(best);
+  }
+
+  /* ------------------------------------------------------------ 交互 */
+  canvas.addEventListener('pointerdown', function (e) {
+    state.dragging = true;
+    state.lastX = e.clientX; state.lastY = e.clientY;
+    try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+    pointerStart = { x: e.clientX, y: e.clientY, t: performance.now(), moved: 0 };
+    burst(e.clientX, e.clientY, 16);
+  });
+
+  var pointerStart = null;
+
+  canvas.addEventListener('pointermove', function (e) {
+    if (!state.dragging) return;
+    var dx = e.clientX - state.lastX, dy = e.clientY - state.lastY;
+    state.lastX = e.clientX; state.lastY = e.clientY;
+    state.rot += dx * 0.0065;
+    state.tilt = clamp(state.tilt + dy * 0.0035, -0.32, 0.28);
+    if (pointerStart) pointerStart.moved += Math.abs(dx) + Math.abs(dy);
+  });
+
+  function endDrag(e) {
+    if (state.dragging && pointerStart &&
+        pointerStart.moved < 12 && performance.now() - pointerStart.t < 600) {
+      clickAt(e.clientX, e.clientY);
+    }
+    state.dragging = false;
+    pointerStart = null;
+  }
+  canvas.addEventListener('pointerup', endDrag);
+  canvas.addEventListener('pointercancel', endDrag);
+
+  function clickAt(x, y) {
+    // 先看有没有点中卡片
+    for (var i = hitRects.length - 1; i >= 0; i--) {
+      var r = hitRects[i];
+      if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) {
+        openLightbox(r.card);
+        return;
+      }
+    }
+    // 点中聚焦卡片 → 收起
+    if (state.focus >= 0) {
+      for (var j = 0; j < cards.length; j++) {
+        if (cards[j].ft > 0.9) {
+          var pw = Math.min(W * 0.62, unit * 0.80);
+          if (Math.abs(x - cx) < pw / 2 && Math.abs(y - (cy - unit * 0.02)) < pw * 0.65) {
+            setFocus(-1);
+            return;
+          }
+        }
+      }
+    }
+  }
+
+  canvas.addEventListener('wheel', function (e) {
+    e.preventDefault();
+    state.targetZoom = clamp(state.targetZoom * (e.deltaY > 0 ? 0.88 : 1.14), 0.62, 2.2);
+  }, { passive: false });
+
+  canvas.addEventListener('dblclick', toggleBurst);
+
+  var lastTouchDist = 0;
+  canvas.addEventListener('touchmove', function (e) {
+    if (e.touches.length === 2) {
+      var dx = e.touches[0].clientX - e.touches[1].clientX;
+      var dy = e.touches[0].clientY - e.touches[1].clientY;
+      var dist = Math.sqrt(dx * dx + dy * dy);
+      if (lastTouchDist) state.targetZoom = clamp(state.targetZoom * (dist / lastTouchDist), 0.62, 2.2);
+      lastTouchDist = dist;
+    } else lastTouchDist = 0;
+  }, { passive: true });
+
+  window.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowLeft') state.rot -= 0.12;
+    if (e.key === 'ArrowRight') state.rot += 0.12;
+    if (e.key === ' ') { e.preventDefault(); toggleBurst(); }
+    if (e.key === 'Escape') { closeLightbox(); setFocus(-1); }
+  });
+
+  /* ------------------------------------------------------------ 原图查看 */
+  var lb = document.getElementById('lightbox');
+  var lbImg = document.getElementById('lbImg');
+  function openLightbox(card) {
+    if (!card) return;
+    if (!card.img) { toast('这张还是占位卡，先把照片放进 photos 文件夹'); return; }
+    lbImg.src = card.img.src;
+    lb.classList.add('on');
+  }
+  function closeLightbox() { lb.classList.remove('on'); }
+  lb.addEventListener('click', function (e) { if (e.target !== lbImg) closeLightbox(); });
+  document.getElementById('lbClose').addEventListener('click', closeLightbox);
+  lbImg.addEventListener('click', closeLightbox);
+
+  /* ------------------------------------------------------------ 音乐（你的 mp3 + 律动分析） */
+  var bgm = document.getElementById('bgm');
+  var audio = { ctx: null, analyser: null, data: null, failed: false };
+
+  function ensureAudioGraph() {
+    if (audio.analyser || audio.failed) return;
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) { audio.failed = true; return; }
+    try {
+      audio.ctx = new AC();
+      var src = audio.ctx.createMediaElementSource(bgm);
+      var an = audio.ctx.createAnalyser();
+      an.fftSize = 256;
+      an.smoothingTimeConstant = 0.8;
+      src.connect(an);
+      an.connect(audio.ctx.destination);
+      audio.analyser = an;
+      audio.data = new Uint8Array(an.frequencyBinCount);
+    } catch (err) {
+      console.warn('audio graph failed', err);
+      audio.failed = true;
+    }
+  }
+
+  function readAudio() {
+    if (!audio.analyser || bgm.paused || bgm.ended) return { bass: 0, energy: 0 };
+    audio.analyser.getByteFrequencyData(audio.data);
+    var n = audio.data.length;
+    var bass = 0, cnt = 0;
+    for (var i = 2; i < 14 && i < n; i++) { bass += audio.data[i]; cnt++; }
+    bass = bass / (cnt * 255);
+    var all = 0;
+    for (var j = 0; j < n; j++) all += audio.data[j];
+    all = all / (n * 255);
+    return { bass: bass, energy: all };
+  }
+
+  function musicPlaying() { return !bgm.paused && !bgm.ended; }
+
+  function playMusic() {
+    ensureAudioGraph();
+    if (audio.ctx && audio.ctx.state === 'suspended') { audio.ctx.resume().catch(function () {}); }
+    var pr = bgm.play();
+    if (pr && pr.catch) pr.catch(function () { toast('浏览器拦住了播放，再点一下「音乐」开关'); });
+  }
+  function pauseMusic() { bgm.pause(); }
+
+  function toggleMusic() {
+    if (musicPlaying()) pauseMusic(); else playMusic();
+    syncMusicSwitch();
+  }
+  function syncMusicSwitch() {
+    document.getElementById('swMusic').setAttribute('aria-pressed', musicPlaying() ? 'true' : 'false');
+  }
+
+  bgm.addEventListener('ended', syncMusicSwitch);
+  bgm.addEventListener('play', syncMusicSwitch);
+  bgm.addEventListener('pause', syncMusicSwitch);
+
+  // 第一次点击页面时尝试开始播放（静默，失败就等用户主动开）
+  var triedAutoplay = false;
+  window.addEventListener('pointerdown', function () {
+    if (triedAutoplay) return;
+    triedAutoplay = true;
+    if (!musicPlaying()) { try { playMusic(); } catch (e) {} }
+  });
+
+  /* ------------------------------------------------------------ 设置面板 */
+  var panel = document.getElementById('panel');
+  var btnSet = document.getElementById('btnSet');
+  btnSet.addEventListener('click', function (e) {
+    e.stopPropagation();
+    panel.classList.toggle('on');
+    btnSet.setAttribute('aria-pressed', panel.classList.contains('on') ? 'true' : 'false');
+  });
+  document.addEventListener('click', function (e) {
+    if (panel.classList.contains('on') && !panel.contains(e.target) && e.target !== btnSet) {
+      panel.classList.remove('on');
+      btnSet.setAttribute('aria-pressed', 'false');
+    }
+  });
+
+  function bindSwitch(id, get, set, after) {
+    var el = document.getElementById(id);
+    el.setAttribute('aria-pressed', get() ? 'true' : 'false');
+    el.addEventListener('click', function () {
+      set(!get());
+      el.setAttribute('aria-pressed', get() ? 'true' : 'false');
+      if (after) after();
+    });
+  }
+
+  bindSwitch('swSnow', function () { return state.snow; },
+    function (v) { state.snow = v; if (v) initSnow(); });
+
+  bindSwitch('swPhoto', function () { return state.cardsOn; },
+    function (v) { state.cardsOn = v; if (!v) setFocus(-1); });
+
+  bindSwitch('swMusic', function () { return musicPlaying(); },
+    function (v) { if (v) playMusic(); else pauseMusic(); });
+
+  document.getElementById('pBurst').addEventListener('click', explode);
+  document.getElementById('pGather').addEventListener('click', gather);
+  document.getElementById('pPhotos').addEventListener('click', function () {
+    document.getElementById('fileInput').click();
+  });
+
+  document.getElementById('btnGrab').addEventListener('click', function () { grabNearest(cx); });
+
+  /* 换照片 */
+  document.getElementById('fileInput').addEventListener('change', function (e) {
+    var files = Array.prototype.slice.call(e.target.files || []).slice(0, 12);
+    if (!files.length) return;
+    replacePhotos(files);
+  });
+  window.addEventListener('dragover', function (e) { e.preventDefault(); });
+  window.addEventListener('drop', function (e) {
+    e.preventDefault();
+    var files = Array.prototype.slice.call(e.dataTransfer.files || []).filter(function (f) {
+      return /^image\//.test(f.type);
+    });
+    if (files.length) replacePhotos(files);
+  });
+
+  function replacePhotos(files) {
+    var imgs = [], pending = files.length;
+    var urls = [];
+    files.slice(0, 12).forEach(function (f, i) {
+      var url = URL.createObjectURL(f);
+      urls[i] = url;
+      var im = new Image();
+      im.onload = function () {
+        imgs[i] = im;
+        if (--pending === 0) {
+          buildCards(imgs);
+          setFocus(-1);
+          toast('已换成你的照片（仅本机预览，想长期显示请传进 photos 文件夹）');
+        }
+      };
+      im.onerror = function () { if (--pending === 0) buildCards(imgs); };
+      im.src = url;
+    });
+  }
+
+  /* ------------------------------------------------------------ 手势 */
+  var gesture = {
+    on: false, hands: null, stream: null,
+    prevX: null, rotActive: false, lastPinch: 0,
+    pinchArmed: true, firedKind: '', kindAt: 0, sending: false, base: ''
+  };
+
+  var MP_BASES = [
+    'https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/',
+    'https://unpkg.com/@mediapipe/hands@0.4.1675469240/'
+  ];
+
+  function loadScript(url) {
+    return new Promise(function (res, rej) {
+      var s = document.createElement('script');
+      s.src = url;
+      s.onload = function () { res(); };
+      s.onerror = function () { rej(new Error('load fail')); };
+      document.head.appendChild(s);
+    });
+  }
+
+  function startGesture() {
+    if (gesture.on) { stopGesture(); return; }
+    var video = document.getElementById('camVideo');
+    navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: 'user' }, audio: false })
+      .then(function (stream) {
+        gesture.stream = stream;
+        video.srcObject = stream;
+        return video.play();
+      })
+      .then(function () {
+        document.getElementById('camPanel').classList.add('on');
+        document.getElementById('btnGesture').setAttribute('aria-pressed', 'true');
+        gesture.on = true;
+        setCamTag('正在加载手势模型…');
+        return initHands();
+      })
+      .catch(function (err) {
+        console.warn(err);
+        stopGesture();
+        toast('没拿到摄像头：拖拽旋转、双击散开也能用');
+      });
+  }
+
+  function stopGesture() {
+    gesture.on = false;
+    if (gesture.stream) {
+      gesture.stream.getTracks().forEach(function (t) { t.stop(); });
+      gesture.stream = null;
+    }
+    document.getElementById('camVideo').srcObject = null;
+    document.getElementById('camPanel').classList.remove('on');
+    document.getElementById('btnGesture').setAttribute('aria-pressed', 'false');
+    document.getElementById('gestureNow').classList.remove('on');
+  }
+
+  function setCamTag(txt) { document.getElementById('camTag').textContent = txt; }
+
+  function initHands() {
+    if (gesture.hands) { setCamTag('手势识别中…'); return Promise.resolve(); }
+    return loadScript(MP_BASES[0] + 'hands.js')
+      .then(function () { gesture.base = MP_BASES[0]; })
+      .catch(function () {
+        return loadScript(MP_BASES[1] + 'hands.js').then(function () { gesture.base = MP_BASES[1]; });
+      })
+      .then(function () {
+        if (!window.Hands) throw new Error('Hands 未就绪');
+        var hands = new window.Hands({ locateFile: function (f) { return gesture.base + f; } });
+        hands.setOptions({ maxNumHands: 1, modelComplexity: 0,
+                           minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
+        hands.onResults(onHands);
+        gesture.hands = hands;
+        setCamTag('手势识别中…');
+        pumpFrames();
+      })
+      .catch(function (err) {
+        console.warn('gesture init failed', err);
+        toast('手势模型没加载成功（可能被网络拦截），已切回鼠标操作');
+        stopGesture();
+      });
+  }
+
+  function pumpFrames() {
+    if (!gesture.on || !gesture.hands) return;
+    var video = document.getElementById('camVideo');
+    if (video.readyState >= 2 && !gesture.sending) {
+      gesture.sending = true;
+      try {
+        gesture.hands.send({ image: video })
+          .then(function () { gesture.sending = false; })
+          .catch(function () { gesture.sending = false; });
+      } catch (e) { gesture.sending = false; }
+    }
+    setTimeout(pumpFrames, 55);
+  }
+
+  function d2(a, b) {
+    var dx = a.x - b.x, dy = a.y - b.y, dz = (a.z || 0) - (b.z || 0);
+    return Math.sqrt(dx * dx + dy * dy + dz * dz * 0.35);
+  }
+
+  function onHands(results) {
+    var overlay = document.getElementById('camOverlay');
+    if (!overlay.width) { overlay.width = 220; overlay.height = 165; }
+    var g = overlay.getContext('2d');
+    g.clearRect(0, 0, overlay.width, overlay.height);
+
+    var gn = document.getElementById('gestureNow');
+
+    if (!results.multiHandLandmarks || !results.multiHandLandmarks.length) {
+      gesture.rotActive = false;
+      gesture.prevX = null;
+      gesture.firedKind = '';
+      gesture.pinchArmed = true;
+      gn.classList.remove('on');
+      return;
+    }
+
+    var lm = results.multiHandLandmarks[0];
+    var cw = overlay.width, chh = overlay.height;
+
+    g.strokeStyle = 'rgba(255,210,120,0.9)';
+    g.lineWidth = 2;
+    var CONN = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],
+                [9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+    for (var c = 0; c < CONN.length; c++) {
+      var A = lm[CONN[c][0]], B = lm[CONN[c][1]];
+      g.beginPath();
+      g.moveTo((1 - A.x) * cw, A.y * chh);
+      g.lineTo((1 - B.x) * cw, B.y * chh);
+      g.stroke();
+    }
+    for (var n = 0; n < lm.length; n++) {
+      g.fillStyle = n % 4 === 0 ? 'rgba(255,240,200,1)' : 'rgba(255,190,110,0.9)';
+      g.beginPath(); g.arc((1 - lm[n].x) * cw, lm[n].y * chh, 2.2, 0, TAU); g.fill();
+    }
+
+    var wrist = lm[0];
+    var handSize = d2(wrist, lm[9]) || 0.1;
+
+    function ext(tip, pip) { return d2(wrist, lm[tip]) > d2(wrist, lm[pip]) * 1.2; }
+    var idx = ext(8, 6), mid = ext(12, 10), ring = ext(16, 14), pink = ext(20, 18);
+    var cnt = (idx ? 1 : 0) + (mid ? 1 : 0) + (ring ? 1 : 0) + (pink ? 1 : 0);
+    var pinchRatio = d2(lm[4], lm[8]) / handSize;
+
+    var palmX = (lm[0].x + lm[9].x) / 2;
+
+    // 左右移动 → 旋转（连续，不会跳）
+    if (gesture.prevX !== null && Math.abs(palmX - gesture.prevX) < 0.25) {
+      state.rot += (palmX - gesture.prevX) * 3.2;
+      gesture.rotActive = Math.abs(palmX - gesture.prevX) > 0.006;
+    } else {
+      gesture.rotActive = false;
+    }
+    gesture.prevX = palmX;
+
+    var label = '', kind = '';
+
+    // 捏合（拇指 + 食指）：边沿触发，抓一次只算一次
+    var pinching = pinchRatio < 0.55 && idx;
+    if (pinching) {
+      label = '🤏 捏合 · 抓取照片'; kind = 'pinch';
+      if (gesture.pinchArmed) {
+        gesture.pinchArmed = false;
+        grabNearest((1 - palmX) * W);
+      }
+      if (gesture.lastPinch) {
+        var dz = pinchRatio - gesture.lastPinch;
+        if (dz < -0.01) state.targetZoom = clamp(state.targetZoom * (1 - dz * 1.2), 0.62, 2.2);
+      }
+      gesture.lastPinch = pinchRatio;
+    } else {
+      gesture.lastPinch = 0;
+      if (pinchRatio > 0.78) gesture.pinchArmed = true;
+
+      if (idx && mid && !ring && !pink) { label = '✌️ 比耶 · 开关落雪'; kind = 'peace'; }
+      else if (cnt >= 4) { label = '🖐 张开手掌 · 散开'; kind = 'open'; }
+      else if (cnt <= 1) { label = '✊ 握拳 · 聚合'; kind = 'fist'; }
+    }
+
+    // 离散手势：稳住 180ms 才触发，且同一手势不重复触发
+    var now = performance.now();
+    if (label) {
+      gn.textContent = label;
+      gn.classList.add('on');
+    } else {
+      gn.classList.remove('on');
+    }
+
+    if (kind && kind !== 'pinch') {
+      if (kind !== gesture.firedKind) {
+        gesture.firedKind = kind;
+        gesture.kindAt = now;
+      } else if (now - gesture.kindAt > 180) {
+        if (kind === 'open') explode();
+        else if (kind === 'fist') gather();
+        else if (kind === 'peace') toggleSnow();
+        gesture.kindAt = now + 100000;   // 触发后锁住，手势变了才重置
+      }
+    } else if (!kind) {
+      gesture.firedKind = '';
+    }
+  }
+
+  function toggleSnow() {
+    state.snow = !state.snow;
+    document.getElementById('swSnow').setAttribute('aria-pressed', state.snow ? 'true' : 'false');
+    if (state.snow) initSnow();
+  }
+
+  document.getElementById('btnGesture').addEventListener('click', startGesture);
+
+  /* ------------------------------------------------------------ toast */
+  var toastTimer = null;
+  function toast(msg) {
+    var el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('on');
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { el.classList.remove('on'); }, 2800);
+  }
+
+  /* ------------------------------------------------------------ 启动 */
+  document.getElementById('hTitle').textContent = CONFIG.title;
+  document.getElementById('hSub').textContent = CONFIG.subtitle;
+
+  buildTree();
+  allocBuffers();
+  buildRingFmt();
+  resize();
+  buildCards([]);
+  loadPhotos(CONFIG.photos, function (imgs) { buildCards(imgs); });
+  requestAnimationFrame(frame);
+
+  var rt = 0;
+  window.addEventListener('resize', function () {
+    clearTimeout(rt);
+    rt = setTimeout(resize, 120);
+  });
+  window.addEventListener('orientationchange', function () { setTimeout(resize, 260); });
+  document.addEventListener('visibilitychange', function () { last = 0; });
+})();
+</script>
+</body>
+</html>
